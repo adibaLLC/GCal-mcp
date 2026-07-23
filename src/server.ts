@@ -34,9 +34,15 @@ export class GoogleCalendarMcpServer {
   }
 
   private async executeWithHandler(handler: any, args: any): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-    // Auth context is already injected at the transport layer via AsyncLocalStorage
-    // Handlers will pull from authContext directly.
-    return await handler.runTool(args);
+    if (!args || typeof args.dentist_id !== 'string') {
+      throw new Error("Missing required parameter: dentist_id");
+    }
+
+    const { authContext } = await import('./context.js');
+
+    return await authContext.run({ rowId: args.dentist_id, timezone: 'UTC' }, async () => {
+      return await handler.runTool(args);
+    });
   }
 
   async start(): Promise<void> {

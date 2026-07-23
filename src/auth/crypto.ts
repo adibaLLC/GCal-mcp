@@ -24,8 +24,8 @@ export function decryptToken(cipherText: string): string {
     throw new Error('Invalid cipherText format. Expected iv:encryptedData');
   }
 
-  const iv = Buffer.from(parts[0], 'hex');
-  const encryptedText = Buffer.from(parts[1], 'hex');
+  const iv = Buffer.from(parts[0], 'base64');
+  const encryptedText = Buffer.from(parts[1], 'base64');
 
   const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
   

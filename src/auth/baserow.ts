@@ -3,7 +3,9 @@ import { decryptToken } from './crypto.js';
 export interface BaserowCredentials {
   client_id: string;
   client_secret: string;
+  access_token: string;
   refresh_token: string;
+  expiry_date?: string;
 }
 
 /**
@@ -11,17 +13,17 @@ export interface BaserowCredentials {
  * @param rowId The Baserow row ID
  */
 export async function fetchBaserowToken(rowId: string): Promise<BaserowCredentials> {
-  const baseUrl = process.env.BASEROW_API_URL;
+  const baseUrl = process.env.BASEROW_API_URL || 'https://api.baserow.io';
   const apiToken = process.env.BASEROW_API_TOKEN;
 
-  if (!baseUrl || !apiToken) {
-    throw new Error('BASEROW_API_URL and BASEROW_API_TOKEN must be set');
+  if (!apiToken) {
+    throw new Error('BASEROW_API_TOKEN must be set');
   }
 
-  // Optional: remove trailing slash from baseUrl if present
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+  const url = `${cleanBaseUrl}/api/database/rows/table/759/${rowId}/?user_field_names=true`;
   
-  const response = await fetch(`${cleanBaseUrl}/api/database/rows/table/759/${rowId}/`, {
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
       'Authorization': `Token ${apiToken}`,
@@ -30,25 +32,28 @@ export async function fetchBaserowToken(rowId: string): Promise<BaserowCredentia
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch from Baserow: ${response.status} ${response.statusText}`);
+    if (response.status === 404) {
+      throw new Error(`DATABASE_ERROR: Dentist ID ${rowId} not found in Table 759.`);
+    }
+    throw new Error(`DATABASE_ERROR: Baserow API returned status ${response.status}`);
   }
 
   const data = await response.json() as any;
 
-  // Assuming Baserow returns the encrypted token in a field named 'GCal_Refresh_Token'
-  // Also assuming client_id and client_secret are provided in the environment or in the row
-  // Wait, the plan only specifies decrypting 'GCal_Refresh_Token'. 
-  // Let's assume the Google OAuth Client ID and Secret are loaded from the environment 
-  // to avoid storing them repeatedly in Baserow if they are global for the SaaS, 
-  // or if they are in Baserow, we can fetch them. 
-  // Usually, a SaaS uses a single Google OAuth app. Let's use env vars for client id/secret.
-  
-  const encryptedRefreshToken = data.GCal_Refresh_Token;
-  if (!encryptedRefreshToken) {
-    throw new Error('GCal_Refresh_Token field is missing in Baserow response');
+  if (data.GCal_Auth_Status?.value === 'Revoked') {
+    throw new Error("ERR_GOOGLE_AUTH_REVOKED");
   }
 
-  const refreshToken = decryptToken(encryptedRefreshToken);
+  const encryptedAccess = data['GCal_access_token'] || data['GCal_ access_token'] || data['access_token'];
+  const encryptedRefresh = data['GCal_refresh_token'] || data['GCal_ refresh_token'] || data['refresh_token'];
+  
+  if (!encryptedRefresh) {
+    throw new Error('GCal_refresh_token field is missing in Baserow response');
+  }
+
+  const accessToken = encryptedAccess ? decryptToken(encryptedAccess) : '';
+  const refreshToken = decryptToken(encryptedRefresh);
+  const expiryDate = data['expiry_date'] || data['GCal_token_expiry'];
   
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -60,6 +65,8 @@ export async function fetchBaserowToken(rowId: string): Promise<BaserowCredentia
   return {
     client_id: clientId,
     client_secret: clientSecret,
-    refresh_token: refreshToken
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expiry_date: expiryDate
   };
 }

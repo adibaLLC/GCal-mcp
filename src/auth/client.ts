@@ -16,10 +16,10 @@ export async function getAuthenticatedClient(rowId: string): Promise<OAuth2Clien
     clientSecret: credentials.client_secret,
   });
 
-  // Since we only have a refresh token, we set it directly. 
-  // The Google auth library will automatically fetch a new access_token when making requests.
   client.setCredentials({
-    refresh_token: credentials.refresh_token
+    access_token: credentials.access_token || undefined,
+    refresh_token: credentials.refresh_token,
+    expiry_date: credentials.expiry_date ? Number(credentials.expiry_date) : undefined
   });
 
   return client;

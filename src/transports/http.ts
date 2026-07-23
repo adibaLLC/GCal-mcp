@@ -51,17 +51,9 @@ export class HttpTransportHandler {
       }
 
       try {
-        // Extract n8n injected headers
-        const rowId = (req.headers['x-baserow-row-id'] as string) || '';
-        const timezone = (req.headers['x-timezone'] as string) || 'UTC';
-
-        // Wrap the MCP SDK request handler in our AsyncLocalStorage context.
-        // The transport.handleRequest handles both GET /sse and POST /message.
-        // Only POST /message will execute tools and thus need the context,
-        // but wrapping both is safe.
-        await authContext.run({ rowId, timezone }, async () => {
-          await transport.handleRequest(req, res);
-        });
+        // We removed n8n-specific auth headers (X-Baserow-Row-Id, X-Timezone)
+        // Authentication is now routed in the application layer via dentist_id in tool schemas.
+        await transport.handleRequest(req, res);
       } catch (error) {
         logger.error({ err: error }, 'Error handling request');
         if (!res.headersSent) {
